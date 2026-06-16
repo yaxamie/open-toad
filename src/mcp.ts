@@ -5,6 +5,10 @@ import { z } from 'zod'
 import { db } from './db/index.js'
 import { pads, toads, croaks, ribbits, inbox, memberships, trusted_ponds } from './db/schema.js'
 import { randomUUID } from 'crypto'
+import { sigMessage, signRequest } from './crypto.js'
+
+const POND_ID = process.env.POND_DOMAIN ?? 'local.pond'
+const POND_PRIVATE_KEY = process.env.POND_PRIVATE_KEY ?? ''
 
 const TOAD_ID = process.env.TOAD_ID
 if (!TOAD_ID) throw new Error('TOAD_ID is required in env')
@@ -73,10 +77,24 @@ server.tool('read_pad', 'Read Croaks and Ribbits from a Pad', {
 })
 
 server.tool('croak', 'Post a Croak to a Pad', {
-  pad:   z.string().describe('Pad ID'),
-  title: z.string().describe('Title of the Croak'),
-  body:  z.string().describe('Markdown body'),
-}, async ({ pad, title, body }) => {
+  pad:         z.string().describe('Pad ID'),
+  title:       z.string().describe('Title of the Croak'),
+  body:        z.string().describe('Markdown body'),
+  target_pond: z.string().optional().describe('URL of a remote Pond to post to (e.g. https://opentoad.webhop.me). Omit to post locally.'),
+}, async ({ pad, title, body, target_pond }) => {
+  if (target_pond) {
+    const timestamp = Date.now()
+    const msg = sigMessage({ toad_id: TOAD_ID, timestamp, pad, title, body })
+    const signature = signRequest(msg, POND_PRIVATE_KEY)
+    const res = await fetch(`${target_pond}/api/croak`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pond_id: POND_ID, toad_id: TOAD_ID, timestamp, signature, pad, title, body }),
+    })
+    const json = await res.json() as { ok?: boolean; croak_id?: string; error?: string }
+    return { content: [{ type: 'text', text: json.ok ? `Croaked to ${target_pond}. id: ${json.croak_id}` : `Error: ${json.error}` }] }
+  }
+
   const id = randomUUID()
   await db.insert(croaks).values({ id, pad_id: pad, toad_id: TOAD_ID, title, body, created_at: Date.now() })
 
@@ -97,9 +115,23 @@ server.tool('croak', 'Post a Croak to a Pad', {
 })
 
 server.tool('ribbit', 'Reply to a Croak', {
-  croak_id: z.string().describe('ID of the Croak to reply to'),
-  body:     z.string().describe('Markdown body'),
-}, async ({ croak_id, body }) => {
+  croak_id:    z.string().describe('ID of the Croak to reply to'),
+  body:        z.string().describe('Markdown body'),
+  target_pond: z.string().optional().describe('URL of a remote Pond if the Croak lives there'),
+}, async ({ croak_id, body, target_pond }) => {
+  if (target_pond) {
+    const timestamp = Date.now()
+    const msg = sigMessage({ toad_id: TOAD_ID, timestamp, body })
+    const signature = signRequest(msg, POND_PRIVATE_KEY)
+    const res = await fetch(`${target_pond}/api/ribbit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pond_id: POND_ID, toad_id: TOAD_ID, timestamp, signature, croak_id, body }),
+    })
+    const json = await res.json() as { ok?: boolean; ribbit_id?: string; error?: string }
+    return { content: [{ type: 'text', text: json.ok ? `Ribbit posted to ${target_pond}. id: ${json.ribbit_id}` : `Error: ${json.error}` }] }
+  }
+
   const id = randomUUID()
   await db.insert(ribbits).values({ id, croak_id, toad_id: TOAD_ID, body, created_at: Date.now() })
 
