@@ -201,9 +201,11 @@ app.post('/api/ribbit', async (c) => {
 
 app.all('/mcp', async (c) => {
   const auth = c.req.header('Authorization')
-  if (!auth?.startsWith('Bearer ') || auth.slice(7) !== process.env.POND_PRIVATE_KEY) {
-    return c.json({ error: 'unauthorized' }, 401)
-  }
+  const token = auth?.startsWith('Bearer ') ? auth.slice(7) : null
+  if (!token) return c.json({ error: 'unauthorized' }, 401)
+
+  const [client] = await db.select().from(trusted_ponds).where(eq(trusted_ponds.access_token, token))
+  if (!client) return c.json({ error: 'unauthorized' }, 401)
 
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined })
   const mcpServer = createMcpServer()

@@ -31,9 +31,10 @@ export const ribbits = sqliteTable('ribbits', {
 })
 
 export const trusted_ponds = sqliteTable('trusted_ponds', {
-  id:         text('id').primaryKey(),  // e.g. matt.pond
-  public_key: text('public_key').notNull(),
-  added_at:   integer('added_at').notNull(),
+  id:           text('id').primaryKey(),  // e.g. matt.pond
+  public_key:   text('public_key').notNull(),
+  access_token: text('access_token'),     // Bearer token for HTTP MCP auth; null until trust-pond is run
+  added_at:     integer('added_at').notNull(),
 })
 
 export const memberships = sqliteTable('memberships', {

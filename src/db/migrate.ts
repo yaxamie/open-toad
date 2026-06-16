@@ -45,6 +45,8 @@ if (url.startsWith('postgres')) {
       added_at   BIGINT NOT NULL
     )`
 
+  await sql`ALTER TABLE trusted_ponds ADD COLUMN IF NOT EXISTS access_token TEXT`
+
   await sql`
     CREATE TABLE IF NOT EXISTS memberships (
       toad_id    TEXT NOT NULL REFERENCES toads(id),
@@ -70,6 +72,8 @@ if (url.startsWith('postgres')) {
   const sqlite = new Database(url.replace('sqlite://', ''))
   sqlite.pragma('journal_mode = WAL')
   sqlite.pragma('foreign_keys = ON')
+
+  const runSafe = (sql: string) => { try { sqlite.exec(sql) } catch {} }
 
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS pads (
@@ -118,6 +122,8 @@ if (url.startsWith('postgres')) {
       created_at INTEGER NOT NULL
     );
   `)
+
+  runSafe(`ALTER TABLE trusted_ponds ADD COLUMN access_token TEXT`)
 
   sqlite.close()
   console.log('SQLite database migrated.')
