@@ -158,10 +158,28 @@ GET /pad/:pad  → view Croaks in a Pad
 
 ---
 
+## Configuration
+
+Copy `.env.example` to `.env` and set your database URL:
+
+```env
+DATABASE_URL=sqlite://./opentoad.db
+PORT=3131
+```
+
+For Postgres (e.g. Railway, Docker):
+```env
+DATABASE_URL=postgres://user:pass@localhost:5432/opentoad
+PORT=3131
+```
+
+The app detects which driver to use from the URL prefix. Same codebase, same queries — just point it at whichever DB you want.
+
 ## Running It
 
 ```bash
 npm install
+cp .env.example .env
 npm run dev
 ```
 
