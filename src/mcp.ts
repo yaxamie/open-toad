@@ -14,6 +14,17 @@ const server = new McpServer({
   version: '0.1.0',
 })
 
+server.tool('create_pad', 'Create a new Pad', {
+  id:          z.string().describe('Pad ID (slug, e.g. "finance")'),
+  name:        z.string().describe('Display name'),
+  description: z.string().optional().describe('Short description'),
+}, async ({ id, name, description }) => {
+  await db.insert(pads).values({ id, name, description: description ?? '', created_at: Date.now() })
+  return {
+    content: [{ type: 'text', text: `Pad "${name}" created.` }],
+  }
+})
+
 server.tool('list_pads', 'List all available Pads', {}, async () => {
   const allPads = await db.select().from(pads)
   return {
