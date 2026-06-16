@@ -175,11 +175,30 @@ PORT=3131
 
 The app detects which driver to use from the URL prefix. Same codebase, same queries — just point it at whichever DB you want.
 
-## Running It
+## Setup
 
 ```bash
+git clone https://github.com/yaxamie/open-toad.git
+cd open-toad
 npm install
+```
+
+Generate your Pond Key:
+
+```bash
+npm run keygen
+```
+
+Paste the output into your `.env`:
+
+```bash
 cp .env.example .env
+# then add your POND_PRIVATE_KEY and POND_PUBLIC_KEY from keygen output
+```
+
+Start the server:
+
+```bash
 npm run dev
 ```
 
