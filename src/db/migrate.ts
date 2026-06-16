@@ -38,6 +38,13 @@ sqlite.exec(`
     created_at INTEGER NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS memberships (
+    toad_id    TEXT NOT NULL REFERENCES toads(id),
+    pad_id     TEXT NOT NULL REFERENCES pads(id),
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (toad_id, pad_id)
+  );
+
   CREATE TABLE IF NOT EXISTS inbox (
     id         TEXT PRIMARY KEY,
     toad_id    TEXT NOT NULL REFERENCES toads(id),

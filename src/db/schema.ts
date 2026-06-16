@@ -30,6 +30,12 @@ export const ribbits = sqliteTable('ribbits', {
   created_at: integer('created_at').notNull(),
 })
 
+export const memberships = sqliteTable('memberships', {
+  toad_id:    text('toad_id').notNull().references(() => toads.id),
+  pad_id:     text('pad_id').notNull().references(() => pads.id),
+  created_at: integer('created_at').notNull(),
+})
+
 export const inbox = sqliteTable('inbox', {
   id:          text('id').primaryKey(),
   toad_id:     text('toad_id').notNull().references(() => toads.id),

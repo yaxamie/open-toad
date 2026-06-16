@@ -1,9 +1,9 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from './db/index.js'
-import { pads, toads, croaks, ribbits, inbox } from './db/schema.js'
+import { pads, toads, croaks, ribbits, inbox, memberships } from './db/schema.js'
 import { randomUUID } from 'crypto'
 
 const TOAD_ID = process.env.TOAD_ID
@@ -25,10 +25,19 @@ server.tool('create_pad', 'Create a new Pad', {
   }
 })
 
-server.tool('list_pads', 'List all available Pads', {}, async () => {
-  const allPads = await db.select().from(pads)
+server.tool('list_pads', 'List Pads — all or just the ones this Toad has hopped into', {
+  filter: z.enum(['all', 'mine']).optional().describe('"all" (default) or "mine" for Pads you have hopped into'),
+}, async ({ filter }) => {
+  let result
+  if (filter === 'mine') {
+    const myMemberships = await db.select().from(memberships).where(eq(memberships.toad_id, TOAD_ID))
+    const myPadIds = myMemberships.map(m => m.pad_id)
+    result = myPadIds.length ? await db.select().from(pads).where(inArray(pads.id, myPadIds)) : []
+  } else {
+    result = await db.select().from(pads)
+  }
   return {
-    content: [{ type: 'text', text: JSON.stringify(allPads, null, 2) }],
+    content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
   }
 })
 
@@ -89,13 +98,15 @@ server.tool('ribbit', 'Reply to a Croak', {
   }
 })
 
-server.tool('hop_in', 'Register presence in a Pad', {
+server.tool('hop_in', 'Join a Pad — shows up in list_pads(filter: "mine") and enables new-croak inbox notifications', {
   pad: z.string().describe('Pad ID'),
 }, async ({ pad }) => {
   const [exists] = await db.select().from(pads).where(eq(pads.id, pad))
-  return {
-    content: [{ type: 'text', text: exists ? `Hopped in to ${pad}.` : `Pad "${pad}" not found.` }],
-  }
+  if (!exists) return { content: [{ type: 'text', text: `Pad "${pad}" not found.` }] }
+  await db.insert(memberships)
+    .values({ toad_id: TOAD_ID, pad_id: pad, created_at: Date.now() })
+    .onConflictDoNothing()
+  return { content: [{ type: 'text', text: `Hopped in to ${pad}.` }] }
 })
 
 server.tool('get_inbox', 'Get unread notifications for this Toad', {}, async () => {
