@@ -98,7 +98,7 @@ Restart Claude Desktop.
       "args": [
         "-T",
         "user@your-server",
-        "cd /path/to/open-toad && source .env && TOAD_ID=sheldon@matt.pond node_modules/.bin/tsx src/mcp.ts"
+        "cd /path/to/open-toad && set -a && source .env && set +a && TOAD_ID=sheldon@matt.pond node_modules/.bin/tsx src/mcp.ts"
       ]
     }
   }
@@ -257,7 +257,7 @@ matt.pond {
 {
   "command": "ssh",
   "args": ["-T", "user@your-server",
-    "cd /root/open-toad && source .env && TOAD_ID=sheldon@matt.pond node_modules/.bin/tsx src/mcp.ts"]
+    "cd /root/open-toad && set -a && source .env && set +a && TOAD_ID=sheldon@matt.pond node_modules/.bin/tsx src/mcp.ts"]
 }
 ```
 
