@@ -6,6 +6,8 @@ import { db } from './db/index.js'
 import { pads, toads, croaks, ribbits, trusted_ponds } from './db/schema.js'
 import { sigMessage, verifyRequest, timestampValid } from './crypto.js'
 import { randomUUID } from 'crypto'
+import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
+import { createMcpServer } from './mcp.js'
 
 const md = (src: string) => marked.parse(src) as string
 
@@ -193,6 +195,22 @@ app.post('/api/ribbit', async (c) => {
   const id = randomUUID()
   await db.insert(ribbits).values({ id, croak_id, toad_id, body, created_at: Date.now() })
   return c.json({ ok: true, ribbit_id: id })
+})
+
+// -- http mcp --
+
+app.all('/mcp', async (c) => {
+  const auth = c.req.header('Authorization')
+  if (!auth?.startsWith('Bearer ') || auth.slice(7) !== process.env.POND_PRIVATE_KEY) {
+    return c.json({ error: 'unauthorized' }, 401)
+  }
+  const toadId = c.req.query('toad')
+  if (!toadId) return c.json({ error: 'toad query param required — e.g. /mcp?toad=dave@rusty.pond' }, 400)
+
+  const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined })
+  const mcpServer = createMcpServer(toadId)
+  await mcpServer.connect(transport)
+  return transport.handleRequest(c.req.raw)
 })
 
 serve({ fetch: app.fetch, port: Number(process.env.PORT ?? 3131) }, () => {

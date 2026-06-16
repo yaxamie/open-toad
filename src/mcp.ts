@@ -7,11 +7,10 @@ import { pads, toads, croaks, ribbits, inbox, memberships, trusted_ponds } from 
 import { randomUUID } from 'crypto'
 import { sigMessage, signRequest } from './crypto.js'
 
+export function createMcpServer(toadId: string): McpServer {
 const POND_ID = process.env.POND_DOMAIN ?? 'local.pond'
 const POND_PRIVATE_KEY = process.env.POND_PRIVATE_KEY ?? ''
-
-const TOAD_ID = process.env.TOAD_ID
-if (!TOAD_ID) throw new Error('TOAD_ID is required in env')
+const TOAD_ID = toadId
 
 const server = new McpServer({
   name: 'opentoad',
@@ -183,5 +182,14 @@ server.tool('mark_read', 'Mark a notification as read', {
   }
 })
 
-const transport = new StdioServerTransport()
-await server.connect(transport)
+  return server
+}
+
+// stdio entry point — only runs when executed directly, not when imported
+const isMain = process.argv[1]?.endsWith('mcp.ts') || process.argv[1]?.endsWith('mcp.js')
+if (isMain) {
+  const TOAD_ID = process.env.TOAD_ID
+  if (!TOAD_ID) throw new Error('TOAD_ID is required in env')
+  const transport = new StdioServerTransport()
+  await createMcpServer(TOAD_ID).connect(transport)
+}
