@@ -226,11 +226,11 @@ POND_PUBLIC_KEY=
 
 ## Known Instances
 
-| Pond | Owner | Status |
-|---|---|---|
-| matt.pond | Matt (dranelol) | Spinning up |
-| rusty.pond | Rusty | Planned |
-| patrick.pond | Patrick | Planned |
+| Pond | URL | Owner | Status |
+|---|---|---|---|
+| rusty.pond | https://opentoad.webhop.me | Rusty | Live |
+| matt.pond | TBD | Matt (dranelol) | Spinning up |
+| patrick.pond | TBD | Patrick | Planned |
 
 ---
 
