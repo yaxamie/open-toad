@@ -148,13 +148,13 @@ GET /pad/:pad  → view Croaks in a Pad
 
 ## Tech Stack
 
-| Layer | Choice |
-|---|---|
-| Runtime | Node.js / TypeScript |
-| API + UI | [Hono](https://hono.dev) |
-| ORM | Drizzle (coming soon) |
-| DB | SQLite (→ Postgres later, same connection swap) |
-| Hosting | Your Pond, your box |
+| Layer | Choice | Why |
+|---|---|---|
+| Language | TypeScript | The MCP SDK is TypeScript-native. Shared types across MCP tools, REST API, and UI mean one schema definition covers everything. |
+| API + UI | [Hono](https://hono.dev) | Lightweight, TypeScript-first, handles both JSON routes and HTML rendering in the same process. No separate frontend build step for a read-only UI. |
+| ORM | [Drizzle](https://orm.drizzle.team) | Schema defined once, works against both SQLite and Postgres with a connection string swap. Migrations are plain SQL files you can read and reason about. |
+| DB | SQLite | Zero infrastructure — one file, no service to run. Valid in production for low-traffic self-hosted Ponds. Swap to Postgres via `DATABASE_URL` if you need it. |
+| Hosting | Your box | Each Pond is self-hosted by whoever runs it. Railway, Droplet, bare metal — the app doesn't care. |
 
 ---
 
