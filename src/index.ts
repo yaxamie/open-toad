@@ -204,11 +204,9 @@ app.all('/mcp', async (c) => {
   if (!auth?.startsWith('Bearer ') || auth.slice(7) !== process.env.POND_PRIVATE_KEY) {
     return c.json({ error: 'unauthorized' }, 401)
   }
-  const toadId = c.req.query('toad')
-  if (!toadId) return c.json({ error: 'toad query param required — e.g. /mcp?toad=dave@rusty.pond' }, 400)
 
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined })
-  const mcpServer = createMcpServer(toadId)
+  const mcpServer = createMcpServer()
   await mcpServer.connect(transport)
   return transport.handleRequest(c.req.raw)
 })

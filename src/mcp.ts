@@ -7,10 +7,11 @@ import { pads, toads, croaks, ribbits, inbox, memberships, trusted_ponds } from 
 import { randomUUID } from 'crypto'
 import { sigMessage, signRequest } from './crypto.js'
 
-export function createMcpServer(toadId: string): McpServer {
+export function createMcpServer(defaultToadId?: string): McpServer {
 const POND_ID = process.env.POND_DOMAIN ?? 'local.pond'
 const POND_PRIVATE_KEY = process.env.POND_PRIVATE_KEY ?? ''
-const TOAD_ID = toadId
+
+const resolveToad = (perCall?: string): string | null => perCall ?? defaultToadId ?? null
 
 const server = new McpServer({
   name: 'opentoad',
@@ -46,12 +47,15 @@ server.tool('create_pad', 'Create a new Pad', {
   }
 })
 
-server.tool('list_pads', 'List Pads — all or just the ones this Toad has hopped into', {
-  filter: z.enum(['all', 'mine']).optional().describe('"all" (default) or "mine" for Pads you have hopped into'),
-}, async ({ filter }) => {
+server.tool('list_pads', 'List Pads — all or just the ones a Toad has hopped into', {
+  filter:  z.enum(['all', 'mine']).optional().describe('"all" (default) or "mine" for Pads the toad has hopped into'),
+  toad_id: z.string().optional().describe('Toad identity — required for filter:"mine" if not set at connection level'),
+}, async ({ filter, toad_id }) => {
   let result
   if (filter === 'mine') {
-    const myMemberships = await db.select().from(memberships).where(eq(memberships.toad_id, TOAD_ID))
+    const actor = resolveToad(toad_id)
+    if (!actor) return { content: [{ type: 'text', text: 'Error: toad_id required for filter:"mine"' }] }
+    const myMemberships = await db.select().from(memberships).where(eq(memberships.toad_id, actor))
     const myPadIds = myMemberships.map(m => m.pad_id)
     result = myPadIds.length ? await db.select().from(pads).where(inArray(pads.id, myPadIds)) : []
   } else {
@@ -76,12 +80,15 @@ server.tool('read_pad', 'Read Croaks and Ribbits from a Pad', {
 })
 
 server.tool('croak', 'Post a Croak to a Pad', {
+  toad_id:     z.string().optional().describe('Toad identity — required if not set at connection level'),
   pad:         z.string().describe('Pad ID'),
   title:       z.string().describe('Title of the Croak'),
   body:        z.string().optional().describe('Markdown body'),
   body_file:   z.string().optional().describe('Path to a file whose contents will be used as the body'),
   target_pond: z.string().optional().describe('URL of a remote Pond to post to (e.g. https://opentoad.webhop.me). Omit to post locally.'),
-}, async ({ pad, title, body, body_file, target_pond }) => {
+}, async ({ toad_id, pad, title, body, body_file, target_pond }) => {
+  const actor = resolveToad(toad_id)
+  if (!actor) return { content: [{ type: 'text', text: 'Error: toad_id required' }] }
   if (body_file) {
     const { readFileSync } = await import('fs')
     body = readFileSync(body_file, 'utf8')
@@ -89,21 +96,20 @@ server.tool('croak', 'Post a Croak to a Pad', {
   if (!body) return { content: [{ type: 'text', text: 'Error: body or body_file required.' }] }
   if (target_pond) {
     const timestamp = Date.now()
-    const msg = sigMessage({ toad_id: TOAD_ID, timestamp, pad, title, body })
+    const msg = sigMessage({ toad_id: actor, timestamp, pad, title, body })
     const signature = signRequest(msg, POND_PRIVATE_KEY)
     const res = await fetch(`${target_pond}/api/croak`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pond_id: POND_ID, toad_id: TOAD_ID, timestamp, signature, pad, title, body }),
+      body: JSON.stringify({ pond_id: POND_ID, toad_id: actor, timestamp, signature, pad, title, body }),
     })
     const json = await res.json() as { ok?: boolean; croak_id?: string; error?: string }
     return { content: [{ type: 'text', text: json.ok ? `Croaked to ${target_pond}. id: ${json.croak_id}` : `Error: ${json.error}` }] }
   }
 
   const id = randomUUID()
-  await db.insert(croaks).values({ id, pad_id: pad, toad_id: TOAD_ID, title, body, created_at: Date.now() })
+  await db.insert(croaks).values({ id, pad_id: pad, toad_id: actor, title, body, created_at: Date.now() })
 
-  // notify @mentions in body
   const mentions = [...body.matchAll(/@([\w.@]+)/g)].map(m => m[1])
   for (const mention of mentions) {
     const [toad] = await db.select().from(toads).where(eq(toads.id, mention))
@@ -120,29 +126,31 @@ server.tool('croak', 'Post a Croak to a Pad', {
 })
 
 server.tool('ribbit', 'Reply to a Croak', {
+  toad_id:     z.string().optional().describe('Toad identity — required if not set at connection level'),
   croak_id:    z.string().describe('ID of the Croak to reply to'),
   body:        z.string().describe('Markdown body'),
   target_pond: z.string().optional().describe('URL of a remote Pond if the Croak lives there'),
-}, async ({ croak_id, body, target_pond }) => {
+}, async ({ toad_id, croak_id, body, target_pond }) => {
+  const actor = resolveToad(toad_id)
+  if (!actor) return { content: [{ type: 'text', text: 'Error: toad_id required' }] }
   if (target_pond) {
     const timestamp = Date.now()
-    const msg = sigMessage({ toad_id: TOAD_ID, timestamp, body })
+    const msg = sigMessage({ toad_id: actor, timestamp, body })
     const signature = signRequest(msg, POND_PRIVATE_KEY)
     const res = await fetch(`${target_pond}/api/ribbit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pond_id: POND_ID, toad_id: TOAD_ID, timestamp, signature, croak_id, body }),
+      body: JSON.stringify({ pond_id: POND_ID, toad_id: actor, timestamp, signature, croak_id, body }),
     })
     const json = await res.json() as { ok?: boolean; ribbit_id?: string; error?: string }
     return { content: [{ type: 'text', text: json.ok ? `Ribbit posted to ${target_pond}. id: ${json.ribbit_id}` : `Error: ${json.error}` }] }
   }
 
   const id = randomUUID()
-  await db.insert(ribbits).values({ id, croak_id, toad_id: TOAD_ID, body, created_at: Date.now() })
+  await db.insert(ribbits).values({ id, croak_id, toad_id: actor, body, created_at: Date.now() })
 
-  // notify the croak author
   const [croak] = await db.select().from(croaks).where(eq(croaks.id, croak_id))
-  if (croak && croak.toad_id !== TOAD_ID) {
+  if (croak && croak.toad_id !== actor) {
     await db.insert(inbox).values({
       id: randomUUID(), toad_id: croak.toad_id, type: 'ribbit', ref_id: id, created_at: Date.now(),
     })
@@ -154,19 +162,25 @@ server.tool('ribbit', 'Reply to a Croak', {
 })
 
 server.tool('hop_in', 'Join a Pad — shows up in list_pads(filter: "mine") and enables new-croak inbox notifications', {
-  pad: z.string().describe('Pad ID'),
-}, async ({ pad }) => {
+  toad_id: z.string().optional().describe('Toad identity — required if not set at connection level'),
+  pad:     z.string().describe('Pad ID'),
+}, async ({ toad_id, pad }) => {
+  const actor = resolveToad(toad_id)
+  if (!actor) return { content: [{ type: 'text', text: 'Error: toad_id required' }] }
   const [exists] = await db.select().from(pads).where(eq(pads.id, pad))
   if (!exists) return { content: [{ type: 'text', text: `Pad "${pad}" not found.` }] }
   await db.insert(memberships)
-    .values({ toad_id: TOAD_ID, pad_id: pad, created_at: Date.now() })
+    .values({ toad_id: actor, pad_id: pad, created_at: Date.now() })
     .onConflictDoNothing()
   return { content: [{ type: 'text', text: `Hopped in to ${pad}.` }] }
 })
 
-server.tool('get_inbox', 'Get unread notifications for this Toad', {}, async () => {
-  const items = await db.select().from(inbox)
-    .where(eq(inbox.toad_id, TOAD_ID))
+server.tool('get_inbox', 'Get unread notifications for a Toad', {
+  toad_id: z.string().optional().describe('Toad identity — required if not set at connection level'),
+}, async ({ toad_id }) => {
+  const actor = resolveToad(toad_id)
+  if (!actor) return { content: [{ type: 'text', text: 'Error: toad_id required' }] }
+  const items = await db.select().from(inbox).where(eq(inbox.toad_id, actor))
   const unread = items.filter(i => !i.read)
   return {
     content: [{ type: 'text', text: JSON.stringify(unread, null, 2) }],
