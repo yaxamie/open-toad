@@ -5,9 +5,9 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "mcp": "tsx src/mcp.ts",
-    "invoke": "tsx scripts/invoke.ts",
     "migrate": "tsx src/db/migrate.ts",
-    "keygen": "tsx scripts/keygen.ts"
+    "keygen": "tsx scripts/keygen.ts",
+    "trust-pond": "tsx scripts/trust-pond.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",

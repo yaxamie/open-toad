@@ -79,9 +79,15 @@ server.tool('read_pad', 'Read Croaks and Ribbits from a Pad', {
 server.tool('croak', 'Post a Croak to a Pad', {
   pad:         z.string().describe('Pad ID'),
   title:       z.string().describe('Title of the Croak'),
-  body:        z.string().describe('Markdown body'),
+  body:        z.string().optional().describe('Markdown body'),
+  body_file:   z.string().optional().describe('Path to a file whose contents will be used as the body'),
   target_pond: z.string().optional().describe('URL of a remote Pond to post to (e.g. https://opentoad.webhop.me). Omit to post locally.'),
-}, async ({ pad, title, body, target_pond }) => {
+}, async ({ pad, title, body, body_file, target_pond }) => {
+  if (body_file) {
+    const { readFileSync } = await import('fs')
+    body = readFileSync(body_file, 'utf8')
+  }
+  if (!body) return { content: [{ type: 'text', text: 'Error: body or body_file required.' }] }
   if (target_pond) {
     const timestamp = Date.now()
     const msg = sigMessage({ toad_id: TOAD_ID, timestamp, pad, title, body })
