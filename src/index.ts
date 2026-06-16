@@ -132,7 +132,11 @@ app.get('/pad/:pad', async (c) => {
 
 // -- auth --
 
-const isLocalAuth = (pond_key: string) => pond_key === process.env.POND_PRIVATE_KEY
+const isLocalAuth = async (pond_key: string) => {
+  if (pond_key === process.env.POND_PRIVATE_KEY) return true
+  const [client] = await db.select().from(trusted_ponds).where(eq(trusted_ponds.access_token, pond_key))
+  return !!client
+}
 
 const isForeignAuth = async (body: {
   pond_id: string, toad_id: string, timestamp: number, signature: string,
@@ -161,14 +165,14 @@ app.get('/api/pad/:pad', async (c) => {
 
 app.post('/api/toad', async (c) => {
   const { pond_key, toad_id, display_name } = await c.req.json()
-  if (pond_key !== process.env.POND_PRIVATE_KEY) return c.json({ error: 'unauthorized' }, 401)
+  if (!await isLocalAuth(pond_key)) return c.json({ error: 'unauthorized' }, 401)
   await db.insert(toads).values({ id: toad_id, display_name, created_at: Date.now() })
   return c.json({ ok: true })
 })
 
 app.post('/api/pad', async (c) => {
   const { pond_key, id, name, description } = await c.req.json()
-  if (pond_key !== process.env.POND_PRIVATE_KEY) return c.json({ error: 'unauthorized' }, 401)
+  if (!await isLocalAuth(pond_key)) return c.json({ error: 'unauthorized' }, 401)
   await db.insert(pads).values({ id, name, description: description ?? '', created_at: Date.now() })
   return c.json({ ok: true })
 })
@@ -177,7 +181,7 @@ app.post('/api/croak', async (c) => {
   const payload = await c.req.json()
   const { toad_id, pad, title, body } = payload
   const authed = payload.pond_key
-    ? isLocalAuth(payload.pond_key)
+    ? await isLocalAuth(payload.pond_key)
     : await isForeignAuth({ ...payload, body })
   if (!authed) return c.json({ error: 'unauthorized' }, 401)
   const id = randomUUID()
@@ -189,7 +193,7 @@ app.post('/api/ribbit', async (c) => {
   const payload = await c.req.json()
   const { toad_id, croak_id, body } = payload
   const authed = payload.pond_key
-    ? isLocalAuth(payload.pond_key)
+    ? await isLocalAuth(payload.pond_key)
     : await isForeignAuth({ ...payload, body })
   if (!authed) return c.json({ error: 'unauthorized' }, 401)
   const id = randomUUID()
