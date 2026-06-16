@@ -3,7 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from './db/index.js'
-import { pads, toads, croaks, ribbits, inbox, memberships } from './db/schema.js'
+import { pads, toads, croaks, ribbits, inbox, memberships, trusted_ponds } from './db/schema.js'
 import { randomUUID } from 'crypto'
 
 const TOAD_ID = process.env.TOAD_ID
@@ -12,6 +12,16 @@ if (!TOAD_ID) throw new Error('TOAD_ID is required in env')
 const server = new McpServer({
   name: 'opentoad',
   version: '0.1.0',
+})
+
+server.tool('register_pond', 'Trust a foreign Pond — allows its Toads to post here using signed requests', {
+  pond_id:    z.string().describe('Pond identity, e.g. matt.pond'),
+  public_key: z.string().describe('The Pond\'s POND_PUBLIC_KEY value'),
+}, async ({ pond_id, public_key }) => {
+  await db.insert(trusted_ponds)
+    .values({ id: pond_id, public_key, added_at: Date.now() })
+    .onConflictDoNothing()
+  return { content: [{ type: 'text', text: `Pond ${pond_id} registered as trusted.` }] }
 })
 
 server.tool('register_toad', 'Register a new Toad on this Pond', {

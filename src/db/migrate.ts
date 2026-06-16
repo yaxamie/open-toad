@@ -38,6 +38,12 @@ sqlite.exec(`
     created_at INTEGER NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS trusted_ponds (
+    id         TEXT PRIMARY KEY,
+    public_key TEXT NOT NULL,
+    added_at   INTEGER NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS memberships (
     toad_id    TEXT NOT NULL REFERENCES toads(id),
     pad_id     TEXT NOT NULL REFERENCES pads(id),

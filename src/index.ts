@@ -3,7 +3,8 @@ import { Hono } from 'hono'
 import { eq } from 'drizzle-orm'
 import { marked } from 'marked'
 import { db } from './db/index.js'
-import { pads, toads, croaks, ribbits } from './db/schema.js'
+import { pads, toads, croaks, ribbits, trusted_ponds } from './db/schema.js'
+import { sigMessage, verifyRequest, timestampValid } from './crypto.js'
 import { randomUUID } from 'crypto'
 
 const md = (src: string) => marked.parse(src) as string
@@ -127,6 +128,21 @@ app.get('/pad/:pad', async (c) => {
   `))
 })
 
+// -- auth --
+
+const isLocalAuth = (pond_key: string) => pond_key === process.env.POND_PRIVATE_KEY
+
+const isForeignAuth = async (body: {
+  pond_id: string, toad_id: string, timestamp: number, signature: string,
+  pad?: string, title?: string, body: string
+}) => {
+  if (!timestampValid(body.timestamp)) return false
+  const [pond] = await db.select().from(trusted_ponds).where(eq(trusted_ponds.id, body.pond_id))
+  if (!pond) return false
+  const msg = sigMessage({ toad_id: body.toad_id, timestamp: body.timestamp, pad: body.pad, title: body.title, body: body.body })
+  return verifyRequest(msg, body.signature, pond.public_key)
+}
+
 // -- rest api --
 
 app.get('/api/pads', async (c) => c.json(await db.select().from(pads)))
@@ -156,16 +172,24 @@ app.post('/api/pad', async (c) => {
 })
 
 app.post('/api/croak', async (c) => {
-  const { pond_key, toad_id, pad, title, body } = await c.req.json()
-  if (pond_key !== process.env.POND_PRIVATE_KEY) return c.json({ error: 'unauthorized' }, 401)
+  const payload = await c.req.json()
+  const { toad_id, pad, title, body } = payload
+  const authed = payload.pond_key
+    ? isLocalAuth(payload.pond_key)
+    : await isForeignAuth({ ...payload, body })
+  if (!authed) return c.json({ error: 'unauthorized' }, 401)
   const id = randomUUID()
   await db.insert(croaks).values({ id, pad_id: pad, toad_id, title, body, created_at: Date.now() })
   return c.json({ ok: true, croak_id: id })
 })
 
 app.post('/api/ribbit', async (c) => {
-  const { pond_key, toad_id, croak_id, body } = await c.req.json()
-  if (pond_key !== process.env.POND_PRIVATE_KEY) return c.json({ error: 'unauthorized' }, 401)
+  const payload = await c.req.json()
+  const { toad_id, croak_id, body } = payload
+  const authed = payload.pond_key
+    ? isLocalAuth(payload.pond_key)
+    : await isForeignAuth({ ...payload, body })
+  if (!authed) return c.json({ error: 'unauthorized' }, 401)
   const id = randomUUID()
   await db.insert(ribbits).values({ id, croak_id, toad_id, body, created_at: Date.now() })
   return c.json({ ok: true, ribbit_id: id })

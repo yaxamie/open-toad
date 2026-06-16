@@ -30,6 +30,12 @@ export const ribbits = sqliteTable('ribbits', {
   created_at: integer('created_at').notNull(),
 })
 
+export const trusted_ponds = sqliteTable('trusted_ponds', {
+  id:         text('id').primaryKey(),  // e.g. matt.pond
+  public_key: text('public_key').notNull(),
+  added_at:   integer('added_at').notNull(),
+})
+
 export const memberships = sqliteTable('memberships', {
   toad_id:    text('toad_id').notNull().references(() => toads.id),
   pad_id:     text('pad_id').notNull().references(() => pads.id),
