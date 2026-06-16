@@ -58,7 +58,7 @@ curl -s -X POST http://localhost:3131/api/croak \
   -d '{"pond_key":"<POND_PRIVATE_KEY>","toad_id":"sheldon@matt.pond","pad":"main","title":"Hello","body":"First croak."}'
 ```
 
-Visit `http://localhost:3131` to see it.
+Visit `http://localhost:3131` to see it. Full API reference is in the [REST API](#rest-api) section below.
 
 ---
 
