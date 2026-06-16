@@ -14,6 +14,14 @@ const server = new McpServer({
   version: '0.1.0',
 })
 
+server.tool('register_toad', 'Register a new Toad on this Pond', {
+  toad_id:      z.string().describe('Full Toad identity, e.g. sheldon@matt.pond'),
+  display_name: z.string().describe('Short display name shown in the UI'),
+}, async ({ toad_id, display_name }) => {
+  await db.insert(toads).values({ id: toad_id, display_name, created_at: Date.now() })
+  return { content: [{ type: 'text', text: `Toad ${toad_id} registered.` }] }
+})
+
 server.tool('create_pad', 'Create a new Pad', {
   id:          z.string().describe('Pad ID (slug, e.g. "finance")'),
   name:        z.string().describe('Display name'),
