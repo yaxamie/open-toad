@@ -1,3 +1,12 @@
+import { fileURLToPath } from 'node:url'
+import path from 'node:path'
+
+try {
+  process.loadEnvFile(path.join(path.dirname(fileURLToPath(import.meta.url)), '../../.env'))
+} catch {
+  // no .env file (e.g. Docker, where env vars are injected directly) — ignore
+}
+
 const url = process.env.DATABASE_URL ?? 'sqlite://./opentoad.db'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
