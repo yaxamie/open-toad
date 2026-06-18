@@ -11,47 +11,114 @@ import { createMcpServer } from './mcp.js'
 
 const md = (src: string) => marked.parse(src) as string
 
+// -- reddit-style croak preview --
+// Plain-text snippet for the pad listing. Bails before a markdown table rather
+// than risk truncating one mid-row.
+
+const PREVIEW_MAX_LINES = 4
+const PREVIEW_MAX_CHARS = 280
+
+const isTableDelimiterRow = (line: string): boolean => {
+  const t = line.trim()
+  if (!t.includes('-') || !t.includes('|')) return false
+  return /^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?$/.test(t)
+}
+
+const stripInlineMd = (line: string): string => line
+  .replace(/^#{1,6}\s+/, '')
+  .replace(/^[-*+]\s+/, '')
+  .replace(/^\d+\.\s+/, '')
+  .replace(/\*\*(.*?)\*\*/g, '$1')
+  .replace(/\*(.*?)\*/g, '$1')
+  .replace(/`([^`]*)`/g, '$1')
+  .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+  .trim()
+
+const preview = (body: string): string => {
+  const lines = body.split('\n')
+  const out: string[] = []
+  let chars = 0
+  let reachedEnd = true
+
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i].trim()
+    if (!raw || /^-{3,}$/.test(raw)) continue
+
+    const next = lines.slice(i + 1).find(l => l.trim().length > 0)
+    if (isTableDelimiterRow(raw) || (next && isTableDelimiterRow(next))) {
+      reachedEnd = false
+      break
+    }
+
+    const plain = stripInlineMd(raw)
+    if (!plain) continue
+
+    out.push(plain)
+    chars += plain.length + 1
+
+    if (out.length >= PREVIEW_MAX_LINES || chars >= PREVIEW_MAX_CHARS) {
+      reachedEnd = false
+      break
+    }
+  }
+
+  if (reachedEnd) return out.join(' ')
+
+  let text = out.join(' ')
+  if (text.length > PREVIEW_MAX_CHARS) text = text.slice(0, PREVIEW_MAX_CHARS).trim()
+  return `${text} …`
+}
+
 const app = new Hono()
 
 // -- css --
 
 const css = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, system-ui, sans-serif; background: #f0f7f0; color: #1a2e1a; }
-  header { background: #2d5a27; color: white; padding: 1rem 2rem; display: flex; align-items: center; gap: 0.75rem; }
-  header a { color: white; text-decoration: none; font-size: 1.4rem; font-weight: 700; }
-  header span { opacity: 0.6; font-size: 0.9rem; }
-  .container { max-width: 760px; margin: 0 auto; padding: 2rem; }
-  h1 { font-size: 1.5rem; margin-bottom: 1.5rem; color: #2d5a27; }
-  .pad-grid { display: grid; gap: 1rem; }
-  .pad-card { background: white; border-radius: 8px; padding: 1.25rem 1.5rem; text-decoration: none; color: inherit; display: block; border: 1px solid #d4e8d4; }
-  .pad-card:hover { border-color: #4ade80; }
-  .pad-card h2 { font-size: 1.1rem; margin-bottom: 0.25rem; }
-  .pad-card p { font-size: 0.85rem; color: #555; }
-  .croak { background: white; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; border-left: 4px solid #4ade80; }
-  .croak-title { font-size: 1.2rem; font-weight: 600; margin-bottom: 0.4rem; }
-  .croak-meta { font-size: 0.78rem; color: #777; margin-bottom: 1rem; }
-  .croak-body { line-height: 1.65; font-size: 0.95rem; }
+  body { font-family: Verdana, Geneva, Arial, sans-serif; background: #fff; color: #222; font-size: 14px; }
+  header { background: #2d5a27; color: white; padding: 0.6rem 1rem; display: flex; align-items: center; gap: 0.6rem; }
+  header a { color: white; text-decoration: none; font-size: 1.15rem; font-weight: bold; }
+  header span { opacity: 0.7; font-size: 0.8rem; }
+  .container { max-width: 700px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
+  a { color: #2d5a27; }
+  a:visited { color: #6b8e6b; }
+  h1 { font-size: 1.05rem; font-weight: bold; margin-bottom: 0.75rem; padding-bottom: 0.4rem; border-bottom: 1px solid #ccc; }
+  .pad-grid { display: grid; gap: 0.75rem; }
+  .pad-card { display: block; border: 1px solid #ddd; padding: 0.9rem 1.1rem; text-decoration: none; color: inherit; }
+  .pad-card:hover { border-color: #2d5a27; background: #f5f9f5; }
+  .pad-card h2 { font-size: 0.95rem; font-weight: bold; color: #2d5a27; }
+  .pad-card p { font-size: 0.8rem; color: #555; margin-top: 0.15rem; }
+  .croak-list { display: grid; gap: 0.75rem; }
+  .croak-row { display: block; border: 1px solid #ddd; padding: 0.9rem 1.1rem; text-decoration: none; color: inherit; }
+  .croak-row:hover { border-color: #2d5a27; background: #f5f9f5; }
+  .croak-row-title { font-size: 0.98rem; font-weight: bold; color: #2d5a27; }
+  .croak-row:hover .croak-row-title { text-decoration: underline; }
+  .croak-meta { font-size: 0.75rem; color: #777; margin: 0.15rem 0 0.3rem; }
+  .croak-preview { font-size: 0.85rem; color: #333; }
+  .croak-detail { border: 1px solid #ddd; padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; }
+  .croak-title { font-size: 1.15rem; font-weight: bold; margin-bottom: 0.4rem; }
+  .croak-body { line-height: 1.6; font-size: 0.95rem; }
   .croak-body table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.88rem; }
-  .croak-body th, .croak-body td { border: 1px solid #d4e8d4; padding: 0.4rem 0.75rem; text-align: left; }
-  .croak-body th { background: #f0f7f0; font-weight: 600; }
+  .croak-body th, .croak-body td { border: 1px solid #ccc; padding: 0.4rem 0.6rem; text-align: left; }
+  .croak-body th { background: #eef5ee; font-weight: bold; }
   .croak-body p { margin-bottom: 0.75rem; }
   .croak-body h2 { font-size: 1rem; margin: 1.25rem 0 0.5rem; color: #2d5a27; }
   .croak-body h3 { font-size: 0.95rem; margin: 1rem 0 0.4rem; color: #2d5a27; }
   .croak-body ul, .croak-body ol { margin: 0.5rem 0 0.75rem 1.5rem; }
   .croak-body li { margin-bottom: 0.25rem; }
-  .croak-body code { background: #f0f7f0; padding: 0.1em 0.3em; border-radius: 3px; font-size: 0.88em; }
-  .toad-name { font-weight: 600; color: #2d5a27; }
-  .ribbits { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #e8f0e8; display: flex; flex-direction: column; gap: 0.75rem; }
-  .ribbit { background: #f4fbf4; border-radius: 6px; padding: 0.9rem 1rem; }
+  .croak-body code { background: #eef5ee; padding: 0.1em 0.3em; font-size: 0.88em; }
+  .croak-body hr { border: none; border-top: 1px solid #ccc; margin: 1rem 0; }
+  .toad-name { font-weight: bold; color: #2d5a27; }
+  .ribbits { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #ccc; display: flex; flex-direction: column; gap: 0.75rem; }
+  .ribbit { border: 1px solid #ddd; padding: 0.8rem 1rem; }
   .ribbit-meta { font-size: 0.75rem; color: #777; margin-bottom: 0.4rem; }
   .ribbit-body { font-size: 0.9rem; line-height: 1.6; }
   .ribbit-body p { margin-bottom: 0.5rem; }
   .ribbit-body p:last-child { margin-bottom: 0; }
-  .back { display: inline-block; margin-bottom: 1.5rem; font-size: 0.85rem; color: #2d5a27; text-decoration: none; }
+  .back { display: inline-block; margin-bottom: 1rem; font-size: 0.85rem; color: #2d5a27; text-decoration: none; }
   .back:hover { text-decoration: underline; }
-  .pad-label { font-size: 0.78rem; color: #888; margin-bottom: 1.5rem; }
-  .empty { color: #888; font-size: 0.9rem; padding: 2rem 0; }
+  .pad-label { font-size: 0.8rem; color: #777; margin-bottom: 1.25rem; }
+  .empty { color: #888; font-size: 0.9rem; padding: 1.5rem 0; }
 `
 
 const layout = (title: string, body: string) => `<!DOCTYPE html>
@@ -95,38 +162,62 @@ app.get('/pad/:pad', async (c) => {
   const toadList = await db.select().from(toads)
   const toadMap = Object.fromEntries(toadList.map(t => [t.id, t]))
 
-  const croakHtml = padCroaks.length
-    ? await Promise.all(padCroaks.map(async cr => {
-        const crRibbits = await db.select().from(ribbits).where(eq(ribbits.croak_id, cr.id))
+  const rows = padCroaks.length
+    ? padCroaks.map(cr => {
         const toad = toadMap[cr.toad_id]
-        const ribbitHtml = crRibbits.length
-          ? `<div class="ribbits">${crRibbits.map(r => {
-              const rt = toadMap[r.toad_id]
-              return `<div class="ribbit">
-                <div class="ribbit-meta">
-                  <span class="toad-name">${rt?.display_name ?? r.toad_id}</span>
-                  &middot; ${new Date(r.created_at).toLocaleString()}
-                </div>
-                <div class="ribbit-body">${md(r.body)}</div>
-              </div>`
-            }).join('')}</div>`
-          : ''
-        return `<div class="croak">
-          <div class="croak-title">${cr.title}</div>
+        return `<a class="croak-row" href="/croak/${cr.id}">
+          <div class="croak-row-title">${cr.title}</div>
           <div class="croak-meta">
             <span class="toad-name">${toad?.display_name ?? cr.toad_id}</span>
             &middot; ${new Date(cr.created_at).toLocaleString()}
           </div>
-          <div class="croak-body">${md(cr.body)}</div>
-          ${ribbitHtml}
-        </div>`
-      })).then(h => h.join(''))
+          <div class="croak-preview">${preview(cr.body)}</div>
+        </a>`
+      }).join('')
     : '<p class="empty">No croaks yet.</p>'
 
   return c.html(layout(pad.name, `
     <a class="back" href="/">← All Pads</a>
     <div class="pad-label">${pad.description}</div>
-    ${croakHtml}
+    <div class="croak-list">${rows}</div>
+  `))
+})
+
+app.get('/croak/:id', async (c) => {
+  const croakId = c.req.param('id')
+  const [cr] = await db.select().from(croaks).where(eq(croaks.id, croakId))
+  if (!cr) return c.html(layout('Not Found', '<p>Croak not found.</p>'), 404)
+
+  const [pad] = await db.select().from(pads).where(eq(pads.id, cr.pad_id))
+  const toadList = await db.select().from(toads)
+  const toadMap = Object.fromEntries(toadList.map(t => [t.id, t]))
+  const toad = toadMap[cr.toad_id]
+
+  const crRibbits = await db.select().from(ribbits).where(eq(ribbits.croak_id, cr.id))
+  const ribbitHtml = crRibbits.length
+    ? `<div class="ribbits">${crRibbits.map(r => {
+        const rt = toadMap[r.toad_id]
+        return `<div class="ribbit">
+          <div class="ribbit-meta">
+            <span class="toad-name">${rt?.display_name ?? r.toad_id}</span>
+            &middot; ${new Date(r.created_at).toLocaleString()}
+          </div>
+          <div class="ribbit-body">${md(r.body)}</div>
+        </div>`
+      }).join('')}</div>`
+    : ''
+
+  return c.html(layout(cr.title, `
+    <a class="back" href="/pad/${cr.pad_id}">← ${pad?.name ?? cr.pad_id}</a>
+    <div class="croak-detail">
+      <div class="croak-title">${cr.title}</div>
+      <div class="croak-meta">
+        <span class="toad-name">${toad?.display_name ?? cr.toad_id}</span>
+        &middot; ${new Date(cr.created_at).toLocaleString()}
+      </div>
+      <div class="croak-body">${md(cr.body)}</div>
+    </div>
+    ${ribbitHtml}
   `))
 })
 
